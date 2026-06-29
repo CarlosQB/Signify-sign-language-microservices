@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ course.title }} - Signify</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/course.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <main class="content">
+            <div class="course-wrapper">
+                <div class="course-header">
+                    <h2 class="lesson-title">{{ course.title }}</h2>
+                </div>
+                
+                <div id="feedback-container" class="feedback" style="display: none;"></div>
+                
+                <div id="question-container">
+                    <!-- Las preguntas se cargarán aquí dinámicamente -->
+                </div>
+
+                <div class="navigation-buttons">
+                    <button id="check-btn" class="nav-btn">Comprobar</button>
+                    <button id="next-btn" class="nav-btn" style="display: none;">Siguiente</button>
+                    <button id="submit-btn" class="submit-btn" style="display: none;">Enviar respuestas</button>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <footer class="footer">
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+    </footer>
+    
+    <script>
+        const questions = {{ course.questions | tojson | safe }};
+        let currentQuestion = 0;
+        let userAnswers = {};
+
+        function showQuestion(index) {
+            const question = questions[index];
+            const container = document.getElementById('question-container');
+            container.innerHTML = `
+                <div class="question" id="question-${question.id}">
+                    <h3>${question.question}</h3>
+                    ${question.image ? `<div class="image-container"><img src="data:image/jpeg;base64,${question.image}" alt="Imagen de la pregunta" class="question-image"></div>` : ''}
+                    <div class="options-container">
+                        ${question.options.map((option, i) => `
+                            <label class="option">
+                                <input type="radio" name="question-${question.id}" value="${option}" required>
+                                <span class="option-text">${option}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateProgressBar() {
+            const progress = ((currentQuestion + 1) / questions.length) * 100;
+            document.getElementById('progress-bar').style.width = `${progress}%`;
+        }
+
+        function checkAnswer() {
+            const selectedOption = document.querySelector(`input[name="question-${questions[currentQuestion].id}"]:checked`);
+            if (!selectedOption) {
+                alert('Por favor, selecciona una respuesta antes de continuar.');
+                return;
+            }
+
+            const userAnswer = selectedOption.value;
+            const correctAnswer = questions[currentQuestion].correct;
+            const isCorrect = userAnswer === correctAnswer;
+
+            userAnswers[questions[currentQuestion].id] = userAnswer;
+
+            const feedbackContainer = document.getElementById('feedback-container');
+            feedbackContainer.innerHTML = isCorrect 
+                ? '<p class="correct">¡Correcto!</p>' 
+                : `<p class="incorrect">Incorrecto. La respuesta correcta es: ${correctAnswer}</p>`;
+            feedbackContainer.style.display = 'block';
+
+            document.getElementById('check-btn').style.display = 'none';
+            document.getElementById('next-btn').style.display = 'block';
+
+            // Disable all radio buttons after checking
+            document.querySelectorAll(`input[name="question-${questions[currentQuestion].id}"]`).forEach(input => {
+                input.disabled = true;
+            });
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            if (currentQuestion < questions.length) {
+                showQuestion(currentQuestion);
+                updateProgressBar();
+                document.getElementById('check-btn').style.display = 'block';
+                document.getElementById('next-btn').style.display = 'none';
+                document.getElementById('feedback-container').style.display = 'none';
+            } else {
+                document.getElementById('next-btn').style.display = 'none';
+                document.getElementById('submit-btn').style.display = 'block';
+            }
+        }
+
+        document.getElementById('check-btn').addEventListener('click', checkAnswer);
+        document.getElementById('next-btn').addEventListener('click', nextQuestion);
+        document.getElementById('submit-btn').addEventListener('click', () => {
+            // Send userAnswers to the server
+            fetch('{{ url_for("submit_course", course_id=course.id) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(userAnswers)
+            }).then(response => response.json())
+              .then(data => {
+                  window.location.href = data.redirect;
+              });
+        });
+
+        showQuestion(currentQuestion);
+        updateProgressBar();
+        document.body.style.zoom = "90%";
+    </script>
+</body>
+</html>
